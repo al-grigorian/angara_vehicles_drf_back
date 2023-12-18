@@ -1,32 +1,144 @@
-from django.shortcuts import render
-from django.shortcuts import render
+from django.shortcuts import render 
 from rest_framework.response import Response 
 from django.shortcuts import get_object_or_404 
 from rest_framework import status 
 from .serializers import * 
 from .models import * 
-from rest_framework.decorators import api_view
-import datetime
+from rest_framework.decorators import api_view,parser_classes
 from minio import Minio
-from rest_framework.parsers import FileUploadParser
-from rest_framework.decorators import parser_classes
-from rest_framework.parsers import MultiPartParser
-from django.contrib.auth import authenticate, login
+from datetime import datetime
+from django.http import HttpResponseBadRequest,HttpResponseServerError
+from rest_framework import viewsets
+from django.contrib.auth import authenticate, login, logout
 from django.http import HttpResponse
-from django.http import HttpResponseBadRequest
-from django.http import HttpResponseServerError
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
+from django.views.decorators.csrf import csrf_exempt
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
+from .permissions import *
+from django.contrib.auth import get_user_model
+import redis
+import uuid
+from django.conf import settings
+from rest_framework.parsers import MultiPartParser
+
 # Create your views here.
+
+session_storage = redis.StrictRedis(host=settings.REDIS_HOST, port=settings.REDIS_PORT)
+
+
+@swagger_auto_schema(method='post', request_body=UserSerializer)
+@api_view(['Post'])
+@permission_classes([AllowAny])
+def create(request):
+    print('aaaaaaaa')
+    if Users.objects.filter(email=request.data['email']).exists():
+        return Response({'status': 'Exist'}, status=400)
+    serializer = UserSerializer(data=request.data)
+    print('sss')
+    if serializer.is_valid():
+        print(serializer.data)
+        Users.objects.create_user(email=serializer.data['email'],
+                                    password=serializer.data['password'],
+                                    is_moderator=serializer.data['is_moderator'])
+        return Response({'status': 'Success'}, status=200)
+    return Response({'status': 'Error', 'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuth])
+def user_info(request):
+    print(request.headers.get('Authorization'))
+    try:
+        access_token = request.COOKIES["access_token"]
+        print('access_token', access_token)
+        if session_storage.exists(access_token):
+            email = session_storage.get(access_token).decode('utf-8')
+            user = Users.objects.get(email=email)
+            application = Applications.objects.filter(customer_id=user.id).filter(status=1).first()
+            user_data = {
+                "user_id": user.id,
+                "email": user.email,
+                "is_moderator": user.is_moderator,
+                "current_cart": application.id if application else -1,
+            }
+            print(user_data)
+            return Response(user_data, status=status.HTTP_200_OK)
+        else:
+            return Response({'status': 'Error', 'message': 'Session does not exist'})
+    except:
+        return Response({'status': 'Error', 'message': 'Cookies are not transmitted'})
+
+
+# @authentication_classes([])
+# @csrf_exempt
+@swagger_auto_schema(method='post', request_body=UserSerializer)
+@api_view(['Post'])
+@permission_classes([AllowAny])
+def login_view(request):
+    username = request.data.get('email')
+    password = request.data.get('password')
+    user = authenticate(request, email=username, password=password)
+    
+    if user is not None:
+        random_key = str(uuid.uuid4())
+        #application = Applications.objects.filter(customer_id=user.id).filter(status=1).first()
+        user_data = {
+            "user_id": user.id,
+            "email": user.email,
+            "is_moderator": user.is_moderator,
+            "access_token": random_key,
+            #"current_cart": application.id if application else -1,
+        }
+        session_storage.set(random_key, username)
+        response = Response(user_data, status=status.HTTP_201_CREATED)
+        response.set_cookie("access_token", random_key)
+
+        return response
+    else:
+        return Response({'status': 'Error'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['Post'])
+@permission_classes([IsAuth])
+def logout_view(request):
+    # authorization_header = request.headers.get('Authorization')
+    # access_token = authorization_header.split(' ')[1] if authorization_header else None
+    access_token = request.COOKIES["access_token"]
+    if access_token is None:
+        message = {"message": "Token is not found in cookie"}
+        return Response(message, status=status.HTTP_401_UNAUTHORIZED)
+    session_storage.delete(access_token)
+    response = Response({'message': 'Logged out successfully'})
+    response.delete_cookie('access_token')
+
+    return response
+
+
+
 
 # ----- Applications ----- 
 
 # GET - получить список всех заявок (фильтр по дате формирования и статусу)
-@api_view(['Get']) 
+@api_view(['Get'])
+@permission_classes([IsAuth])
 def get_applications(request, format=None):
-    date_form = request.GET.get('date_form', datetime.datetime(2023, 9, 14, 18, 0, 0))
-    status_param = request.GET.get('status', 1)
-    applications = Applications.objects.filter(status=status_param) 
-    serializer = ApplicationSerializer(applications, many=True) 
-    return Response(serializer.data) 
+    
+    access_token = request.COOKIES["access_token"]
+    username = session_storage.get(access_token).decode('utf-8')
+    user_id = Users.objects.filter(email=username).values_list('id', flat=True).first()
+
+    if username is not None and user_id is not None:
+        user = Users.objects.get(email=username)
+        print(user.is_moderator)
+        if user.is_moderator:
+            applications = Applications.objects
+        else:
+            applications = Applications.objects.filter(id_creator=user_id).exclude(status=2)
+        serializer = ApplicationSerializer(applications, many=True)
+        return Response(serializer.data)
+    else:
+        return Response("Invalid user", status=status.HTTP_400_BAD_REQUEST)
 
 #DELETE - удалить одну заявку
 @api_view(['Delete']) 
@@ -63,6 +175,7 @@ def get_application(request, pk, format=None):
         return Response(application_data)
 
 @api_view(["PUT"])
+@permission_classes([AllowAny])
 def update_by_user(request, pk):
     if not Applications.objects.filter(pk=pk).exists():
         return Response(f"Заявки с таким id не существует!")
@@ -85,7 +198,9 @@ def update_by_user(request, pk):
     serializer = ApplicationSerializer(application, many=False)
     return Response(serializer.data)
 
+@swagger_auto_schema(method='put',request_body=ApplicationSerializer)
 @api_view(["PUT"])
+@permission_classes([IsModerator])
 def update_by_admin(request, pk):
     if not Applications.objects.filter(pk=pk).exists():
         return Response(f"Заявки с таким id не существует!")
@@ -149,7 +264,8 @@ def update_option_amount(request, application_id, option_id):
 # ----- Options -----
 
 #GET - получить список всех опций (с фильтром)
-@api_view(['Get']) 
+@api_view(['Get'])
+@permission_classes([AllowAny])
 def get_options(request, format=None): 
     
     search_query = request.GET.get('search', '')
@@ -167,7 +283,8 @@ def get_options(request, format=None):
     return Response(serializer.data)
 
 # GET - получить одну опцию
-@api_view(['Get']) 
+@api_view(['Get'])
+@permission_classes([AllowAny]) 
 def get_option(request, pk, format=None): 
     option = get_object_or_404(Components, pk=pk) 
     if request.method == 'GET': 
@@ -185,7 +302,8 @@ def put_option(request, pk, format=None):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 #PUT - удалить одну опцию
-@api_view(['Put']) 
+@api_view(['Put'])
+@permission_classes([IsModerator])
 def delete_option(request, pk, format=None):
     if not Components.objects.filter(pk=pk).exists():
         return Response(f"Опции с таким id не существует!") 
@@ -200,6 +318,7 @@ def delete_option(request, pk, format=None):
 
 #POST - добавить опцию в заявку(если нет открытых заявок, то создать)
 @api_view(['POST'])
+@permission_classes([IsAuth])
 def add_to_application(request, pk):
     if not Components.objects.filter(id=pk).exists():
         return Response(f"Опции с таким id не существует!")
@@ -250,6 +369,7 @@ def post_option(request, format=None):
 # Используется для работы с Minio (подгрузка изображений в хранилище Minio)
 @api_view(['POST'])
 @parser_classes([MultiPartParser])
+@permission_classes([AllowAny])
 def postImageToComponent(request, pk):
     print("Рлофывавы")
     if 'file' in request.FILES:

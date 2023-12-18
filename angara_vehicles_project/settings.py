@@ -26,6 +26,9 @@ SECRET_KEY = 'django-insecure-bwcn@yl2+v1db40*_@8nox)*e0x*y8lkxnj0hyiv&c$)=pf$oy
 DEBUG = True
 
 ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = ['192.168.84.65'] #для нативки python manage.py runserver 172.20.10.3:8000, для остальный комментить
+REDIS_HOST = '127.0.0.1'
+REDIS_PORT = 6379
 
 AUTH_USER_MODEL = 'angara_vehicles_app.Users'
 
@@ -40,7 +43,18 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'angara_vehicles_app',
+    'drf_yasg',
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.BasicAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+    ]
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

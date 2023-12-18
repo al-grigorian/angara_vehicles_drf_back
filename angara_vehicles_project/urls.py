@@ -1,26 +1,30 @@
-"""
-URL configuration for angara_vehicles_project project.
-
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.2/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
-"""
 from django.contrib import admin
+from django.urls import path
+ 
+from django.contrib import admin
+from angara_vehicles_app import views
 from django.urls import include, path
 from rest_framework import routers
-from angara_vehicles_app import views
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
+from django.contrib import admin
 from rest_framework import permissions
+from rest_framework import routers
 
 router = routers.DefaultRouter()
+
+schema_view = get_schema_view(
+   openapi.Info(
+      title="Snippets API",
+      default_version='v1',
+      description="Test description",
+      terms_of_service="https://www.google.com/policies/terms/",
+      contact=openapi.Contact(email="contact@snippets.local"),
+      license=openapi.License(name="BSD License"),
+   ),
+   public=True,
+   permission_classes=(permissions.AllowAny,),
+)
 
 urlpatterns = [
     # OPTIONS
@@ -45,6 +49,12 @@ urlpatterns = [
     path(r"applications/<int:application_id>/delete_option/<int:option_id>/", views.delete_option_from_application),#DELETE - удалить конкретную опцию из конкретной заявки - ок
     path(r"applications/<int:application_id>/update_amount/<int:option_id>/", views.update_option_amount),#PUT - изменить кол-во конкретной опции в заявке - ок
 
+    path('create/',  views.create, name='create'),
+    path('login/',  views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('user_info/', views.user_info, name='user_info'),
+
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     path('admin/', admin.site.urls),
+    path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ]
