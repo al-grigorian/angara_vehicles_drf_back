@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+
+{% block title %}Список комплектаций{% endblock %}
+
+{% block content %}
+<div class="page">
+    <form class="form" method="GET">
+        {% csrf_token %}
+        <input placeholder="Укажите категорию..." class="page__input" name="rocketcopm" type="text" value="{{data.find}}">
+        <input class="page__button" type="submit" value="Поиск">
+    </form>
+    <div class="page__content">
+        {% for var in data.result %}
+            <a href="{% url 'option_url' var.id %}">
+                {% include 'card.html' %}
+            </a>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}

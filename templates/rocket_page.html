@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="plane-page">
+    <div>
+        <a href="{% url 'options_url' %}" class="btn">Вернуться на главную страницу</a>
+    </div>
+    <div class="plane-page__content">
+        <div>
+            <img class="plane-page__image" src="{% static data.result.image_path %}" alt="Изображение ракетоносителя">
+        </div>
+        <div class="plane-page__info">
+            <h2>{{ data.result.component_name }}</h2>
+            <p>{{ data.result.description }}</p>
+            <div>
+                <p><b>Дополнительная информация</b></p>
+                <p><b>Масса компонента: </b>{{data.result.weight }} кг</p>
+                <p><b>Компания-производитель: </b>{{ data.result.manufacturing_ccompany }}</p>
+                <p><b>Место производства: </b>{{ data.result.city_production }}</p>
+            </div>
+            <div>
+                {% if data.result.engine_name != null %}
+                    <div>
+                        <p><b>Информация о двигателе</b></p>
+                        <p><b>Название: </b>{{ data.result.engine_name }}</p>
+                        <p><b>Суммарная тяга: </b>{{ data.result.total_thrust }} тс</p>
+                        <p><b>Сухая масса: </b>{{ data.result.dry_weight }} кг</p>
+                        <p><b>Давление в камере сгорания: </b>{{ data.result.combustion_chamber_pressure }} кгс/см2</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
